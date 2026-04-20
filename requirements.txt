@@ -1,0 +1,29 @@
+# ── Core Framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+gunicorn==23.0.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# ── HTTP Client (async, HTTP/2) ────────────────────────────────────────────────
+httpx[http2]==0.28.1
+
+# ── JWT Validation ─────────────────────────────────────────────────────────────
+PyJWT[crypto]==2.10.1
+cryptography==44.0.0
+
+# ── Caching ────────────────────────────────────────────────────────────────────
+cachetools==5.5.0
+
+# ── AI Providers ──────────────────────────────────────────────────────────────
+openai==1.58.1                 # Works with both OpenAI and Azure OpenAI
+
+# ── Document Text Extraction (optional but recommended) ────────────────────────
+pypdf==5.1.0                   # PDF text extraction
+python-docx==1.1.2             # DOCX text extraction
+
+# ── Dev / Test ─────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1                  # Used by TestClient
+pytest-mock==3.14.0
