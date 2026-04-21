@@ -92,10 +92,15 @@ def validate_token(token: str) -> UserContext:
     """
     settings = get_settings()
 
-    # Expected audience values — Azure AD can issue either format
+    # Expected audience values — Azure AD can issue several formats:
+    # 1. Custom API audience (api://<client-id>) — when connector uses our own API as resource
+    # 2. Bare client ID — alternative Azure format
+    # 3. Microsoft Graph audience — when connector's Resource URL is https://graph.microsoft.com
     valid_audiences = [
         f"api://{settings.azure_client_id}",
         settings.azure_client_id,
+        "https://graph.microsoft.com",
+        "00000003-0000-0000-c000-000000000000",  # Graph's app ID (alternate format)
     ]
     issuer = f"https://sts.windows.net/{settings.azure_tenant_id}/"
     issuer_v2 = (
