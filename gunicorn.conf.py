@@ -9,8 +9,9 @@ import os
 # Uvicorn worker class enables asyncio (required for FastAPI)
 worker_class = "uvicorn.workers.UvicornWorker"
 
-# (2 × CPU cores) + 1 is the standard formula for I/O-bound apps
-workers = int(os.getenv("GUNICORN_WORKERS", (2 * multiprocessing.cpu_count()) + 1))
+# Default to 1 worker for free-tier environments (512MB RAM limit).
+# On paid plans, set GUNICORN_WORKERS env var to (2 × CPU cores) + 1.
+workers = int(os.getenv("GUNICORN_WORKERS", 1))
 
 # Max concurrent connections per worker (asyncio handles these well)
 worker_connections = 1000
