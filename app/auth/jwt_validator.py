@@ -45,6 +45,30 @@ class UserContext:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+def _extract_tenant_from_token(token: str) -> str | None:
+    """
+    Decode the token without verification to extract the tenant ID from the
+    issuer claim. Supports both v1 (sts.windows.net) and v2 (login.microsoftonline.com) issuers.
+    Returns None if extraction fails.
+    """
+    try:
+        import jwt as _jwt
+        unverified = _jwt.decode(token, options={"verify_signature": False})
+        iss = unverified.get("iss", "")
+        # v1: https://sts.windows.net/{tenant-id}/
+        # v2: https://login.microsoftonline.com/{tenant-id}/v2.0
+        if "sts.windows.net" in iss or "login.microsoftonline.com" in iss:
+            parts = iss.rstrip("/").split("/")
+            # The tenant ID is always the segment after the hostname
+            tid = parts[3] if len(parts) >= 4 else None
+            # Skip 'common', 'organizations', 'consumers' — not a real tenant
+            if tid and tid not in ("common", "organizations", "consumers"):
+                return tid
+    except Exception:
+        pass
+    return None
+
+
 def _get_jwks(tenant_id: str) -> dict[str, Any]:
     """Fetch (or return cached) JWKS for the given tenant."""
     cache_key = tenant_id
@@ -102,17 +126,18 @@ def validate_token(token: str) -> UserContext:
         "https://graph.microsoft.com",
         "00000003-0000-0000-c000-000000000000",  # Graph's app ID (alternate format)
     ]
-    issuer = f"https://sts.windows.net/{settings.azure_tenant_id}/"
-    issuer_v2 = (
-        f"https://login.microsoftonline.com/{settings.azure_tenant_id}/v2.0"
-    )
-
     try:
         unverified_header = jwt.get_unverified_header(token)
     except jwt.exceptions.DecodeError as exc:
         raise HTTPException(status_code=401, detail="Malformed token header.") from exc
 
-    jwks = _get_jwks(settings.azure_tenant_id)
+    # Dynamically determine which tenant signed this token so we fetch the
+    # correct JWKS even when the caller is in a different tenant than the
+    # App Registration (common in Copilot Studio / Power Automate environments).
+    token_tenant_id = _extract_tenant_from_token(token) or settings.azure_tenant_id
+    logger.debug("Token tenant resolved to %s", token_tenant_id)
+
+    jwks = _get_jwks(token_tenant_id)
     rsa_key = _find_rsa_key(jwks, unverified_header)
 
     # Try each valid audience — PyJWT raises InvalidAudienceError if none match
@@ -144,9 +169,13 @@ def validate_token(token: str) -> UserContext:
             detail=f"Token audience does not match any accepted value: {valid_audiences}",
         ) from last_error
 
-    # Verify issuer
+    # Verify issuer is from a trusted Azure AD endpoint (any tenant)
     token_issuer = payload.get("iss", "")
-    if token_issuer not in (issuer, issuer_v2):
+    trusted = (
+        token_issuer.startswith("https://sts.windows.net/")
+        or token_issuer.startswith("https://login.microsoftonline.com/")
+    )
+    if not trusted:
         raise HTTPException(
             status_code=401,
             detail=f"Unexpected token issuer: {token_issuer!r}",
