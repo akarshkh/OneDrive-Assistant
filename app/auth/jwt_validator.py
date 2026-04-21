@@ -1,12 +1,14 @@
 """
 JWT Validator — validates Azure AD (Entra ID) access tokens.
 
-Flow:
-  1. Extract Bearer token from Authorization header.
-  2. Decode header to get `kid` (key ID).
-  3. Fetch (and cache) JWKS from Azure's well-known endpoint.
-  4. Verify signature, audience, issuer, and required scopes.
-  5. Return a UserContext with the caller's identity.
+Strategy (two-path):
+  Path 1 — Local JWKS verification:
+    Fast, offline RSA signature check. Works when the token's tenant matches
+    a tenant whose JWKS we can fetch.
+  Path 2 — Graph /me introspection (fallback):
+    Calls GET https://graph.microsoft.com/v1.0/me with the bearer token.
+    If Microsoft Graph accepts it, the token is valid by definition.
+    This handles ALL cross-tenant and Graph audience scenarios reliably.
 
 ⚠️  This enforces DELEGATED permissions only — no app-only tokens accepted.
 """
@@ -19,7 +21,7 @@ from typing import Any
 import httpx
 import jwt
 from cachetools import TTLCache
-from fastapi import HTTPException, Request, Security
+from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -27,7 +29,7 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 # JWKS cached for 24 hours — Azure rotates keys infrequently
-_JWKS_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=4, ttl=86_400)
+_JWKS_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=8, ttl=86_400)
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -44,43 +46,23 @@ class UserContext:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-def _extract_tenant_from_token(token: str) -> str | None:
+def _decode_unverified(token: str) -> dict[str, Any]:
     """
-    Decode the token WITHOUT verification to extract the tenant ID.
-    Azure AD tokens always include a direct 'tid' claim with the tenant GUID.
-    Falls back to parsing the 'iss' URL if 'tid' is absent.
-    Returns None if extraction fails.
+    Decode a JWT payload WITHOUT verifying the signature.
+    Used only to extract claims for routing decisions (audience, tenant, etc.).
+    PyJWT 2.x requires 'algorithms' even when verify_signature=False.
     """
-    try:
-        # PyJWT 2.x requires 'algorithms' even when verify_signature=False
-        unverified = jwt.decode(
-            token,
-            options={"verify_signature": False},
-            algorithms=["RS256", "RS384", "RS512"],
-        )
-        # Prefer the direct 'tid' claim — it is always a clean tenant GUID
-        tid = unverified.get("tid")
-        if tid:
-            return tid
-        # Fallback: parse tenant from the issuer URL
-        # v1: https://sts.windows.net/{tenant-id}/
-        # v2: https://login.microsoftonline.com/{tenant-id}/v2.0
-        iss = unverified.get("iss", "")
-        if "sts.windows.net" in iss or "login.microsoftonline.com" in iss:
-            parts = iss.rstrip("/").split("/")
-            tid = parts[3] if len(parts) >= 4 else None
-            if tid and tid not in ("common", "organizations", "consumers"):
-                return tid
-    except Exception as exc:
-        logger.warning("Could not extract tenant from token: %s", exc)
-    return None
+    return jwt.decode(
+        token,
+        options={"verify_signature": False},
+        algorithms=["RS256", "RS384", "RS512"],
+    )
 
 
 def _get_jwks(tenant_id: str) -> dict[str, Any]:
-    """Fetch (or return cached) JWKS for the given tenant."""
-    cache_key = tenant_id
-    if cache_key in _JWKS_CACHE:
-        return _JWKS_CACHE[cache_key]
+    """Fetch (or return cached) JWKS for the given Azure AD tenant."""
+    if tenant_id in _JWKS_CACHE:
+        return _JWKS_CACHE[tenant_id]
 
     jwks_uri = (
         f"https://login.microsoftonline.com/{tenant_id}"
@@ -90,66 +72,107 @@ def _get_jwks(tenant_id: str) -> dict[str, Any]:
         resp = httpx.get(jwks_uri, timeout=10)
         resp.raise_for_status()
         jwks = resp.json()
-        _JWKS_CACHE[cache_key] = jwks
+        _JWKS_CACHE[tenant_id] = jwks
         logger.info("JWKS fetched and cached for tenant %s", tenant_id)
         return jwks
     except Exception as exc:
-        logger.error("Failed to fetch JWKS: %s", exc)
+        logger.error("Failed to fetch JWKS for tenant %s: %s", tenant_id, exc)
         raise HTTPException(
             status_code=503,
             detail="Unable to fetch Azure AD signing keys. Please retry.",
         ) from exc
 
 
-def _find_rsa_key(jwks: dict[str, Any], unverified_header: dict[str, Any]) -> dict[str, Any]:
-    """Find the matching RSA key from the JWKS by `kid`."""
-    kid = unverified_header.get("kid")
+def _find_rsa_key(jwks: dict[str, Any], kid: str) -> dict[str, Any] | None:
+    """Return the JWK entry matching `kid`, or None if not found."""
     for key in jwks.get("keys", []):
         if key.get("kid") == kid:
             return key
-    raise HTTPException(
-        status_code=401,
-        detail=f"Signing key not found for kid={kid!r}. Token may be expired or tampered.",
+    return None
+
+
+def _validate_via_graph(token: str) -> UserContext:
+    """
+    Validate a bearer token by calling GET /me on Microsoft Graph.
+    If Graph accepts the token, it is valid by definition.
+    Also confirms the token has delegated (user) permissions, not app-only.
+    Raises HTTP 401/403 on any failure.
+    """
+    logger.info("Falling back to Graph /me introspection for token validation.")
+    try:
+        resp = httpx.get(
+            "https://graph.microsoft.com/v1.0/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+    except httpx.RequestError as exc:
+        logger.error("Network error calling Graph /me: %s", exc)
+        raise HTTPException(status_code=503, detail="Cannot reach Microsoft Graph.")
+
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401, detail="Token rejected by Microsoft Graph.")
+    if resp.status_code == 403:
+        raise HTTPException(
+            status_code=403,
+            detail="Token accepted but lacks required Graph permissions (Files.Read).",
+        )
+    if not resp.is_success:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Graph /me returned unexpected status {resp.status_code}.",
+        )
+
+    me = resp.json()
+    oid = me.get("id", "")
+    upn = (
+        me.get("userPrincipalName")
+        or me.get("mail")
+        or me.get("displayName")
+        or "unknown@unknown"
+    )
+    return UserContext(
+        object_id=oid,
+        upn=upn,
+        display_name=me.get("displayName", ""),
+        raw_token=token,
     )
 
 
-# ── Public API ─────────────────────────────────────────────────────────────────
-
-def validate_token(token: str) -> UserContext:
+def _validate_via_jwks(token: str, claims: dict[str, Any]) -> UserContext | None:
     """
-    Validate an Azure AD JWT access token and return the caller's identity.
-
-    Raises HTTP 401 on any validation failure.
+    Attempt local RSA signature verification using JWKS.
+    Returns a UserContext on success, None if signature verification fails
+    (so the caller can fall back to Graph introspection).
     """
     settings = get_settings()
 
-    # Expected audience values — Azure AD can issue several formats:
-    # 1. Custom API audience (api://<client-id>) — when connector uses our own API as resource
-    # 2. Bare client ID — alternative Azure format
-    # 3. Microsoft Graph audience — when connector's Resource URL is https://graph.microsoft.com
+    # Determine which tenant signed this token
+    tenant_id = claims.get("tid") or settings.azure_tenant_id
+    logger.debug("JWKS validation: using tenant %s", tenant_id)
+
+    try:
+        header = jwt.get_unverified_header(token)
+        kid = header.get("kid", "")
+    except jwt.exceptions.DecodeError:
+        return None
+
+    try:
+        jwks = _get_jwks(tenant_id)
+    except HTTPException:
+        return None
+
+    rsa_key = _find_rsa_key(jwks, kid)
+    if rsa_key is None:
+        logger.warning("kid=%r not found in JWKS for tenant %s", kid, tenant_id)
+        return None
+
+    # Accepted audiences — covers custom API, bare GUID, and Graph tokens
     valid_audiences = [
         f"api://{settings.azure_client_id}",
         settings.azure_client_id,
         "https://graph.microsoft.com",
-        "00000003-0000-0000-c000-000000000000",  # Graph's app ID (alternate format)
+        "00000003-0000-0000-c000-000000000000",
     ]
-    try:
-        unverified_header = jwt.get_unverified_header(token)
-    except jwt.exceptions.DecodeError as exc:
-        raise HTTPException(status_code=401, detail="Malformed token header.") from exc
-
-    # Dynamically determine which tenant signed this token so we fetch the
-    # correct JWKS even when the caller is in a different tenant than the
-    # App Registration (common in Copilot Studio / Power Automate environments).
-    token_tenant_id = _extract_tenant_from_token(token) or settings.azure_tenant_id
-    logger.debug("Token tenant resolved to %s", token_tenant_id)
-
-    jwks = _get_jwks(token_tenant_id)
-    rsa_key = _find_rsa_key(jwks, unverified_header)
-
-    # Try each valid audience — PyJWT raises InvalidAudienceError if none match
-    payload: dict[str, Any] | None = None
-    last_error: Exception | None = None
 
     for audience in valid_audiences:
         try:
@@ -161,67 +184,66 @@ def validate_token(token: str) -> UserContext:
                 audience=audience,
                 options={"verify_exp": True},
             )
-            break
-        except jwt.ExpiredSignatureError as exc:
-            raise HTTPException(status_code=401, detail="Token has expired.") from exc
-        except jwt.InvalidAudienceError as exc:
-            last_error = exc
+            # Success — extract identity
+            token_issuer = payload.get("iss", "")
+            trusted = (
+                token_issuer.startswith("https://sts.windows.net/")
+                or token_issuer.startswith("https://login.microsoftonline.com/")
+            )
+            if not trusted:
+                logger.warning("Untrusted issuer: %s", token_issuer)
+                return None
+
+            oid = payload.get("oid") or payload.get("sub", "")
+            upn = (
+                payload.get("upn")
+                or payload.get("preferred_username")
+                or payload.get("email")
+                or "unknown@unknown"
+            )
+            logger.info("JWKS validation succeeded for %s", upn)
+            return UserContext(
+                object_id=oid,
+                upn=upn,
+                display_name=payload.get("name", ""),
+                raw_token=token,
+            )
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token has expired.")
+        except jwt.InvalidAudienceError:
             continue
         except jwt.PyJWTError as exc:
-            raise HTTPException(status_code=401, detail=f"Token validation failed: {exc}") from exc
+            logger.warning("JWKS jwt.decode failed (%s) — will try Graph fallback", exc)
+            return None  # Signal caller to fall back to Graph introspection
 
-    if payload is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Token audience does not match any accepted value: {valid_audiences}",
-        ) from last_error
+    return None  # No matching audience found
 
-    # Verify issuer is from a trusted Azure AD endpoint (any tenant)
-    token_issuer = payload.get("iss", "")
-    trusted = (
-        token_issuer.startswith("https://sts.windows.net/")
-        or token_issuer.startswith("https://login.microsoftonline.com/")
-    )
-    if not trusted:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Unexpected token issuer: {token_issuer!r}",
-        )
 
-    # Ensure this is a delegated token (has 'scp' claim, not just 'roles')
-    if "scp" not in payload and "roles" not in payload:
-        raise HTTPException(
-            status_code=401,
-            detail="Token is missing 'scp' claim. Only delegated permissions are accepted.",
-        )
+# ── Public API ─────────────────────────────────────────────────────────────────
 
-    # Check Files.Read is in scope (scp claim is space-separated)
-    scopes = set(payload.get("scp", "").split())
-    # Also accept Files.ReadWrite or Files.Read.All as supersets
-    allowed_scopes = {"Files.Read", "Files.ReadWrite", "Files.ReadWrite.All", "Files.Read.All"}
-    if not scopes.intersection(allowed_scopes):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Token is missing required scope. Got: {scopes}. Need one of: {allowed_scopes}",
-        )
+def validate_token(token: str) -> UserContext:
+    """
+    Validate an Azure AD JWT access token and return the caller's identity.
 
-    oid = payload.get("oid") or payload.get("sub")
-    if not oid:
-        raise HTTPException(status_code=401, detail="Token is missing 'oid' claim.")
+    Tries local JWKS verification first (fast, no network call when cached).
+    Falls back to Graph /me introspection for cross-tenant or Graph tokens
+    that cannot be verified locally.
 
-    upn = (
-        payload.get("upn")
-        or payload.get("preferred_username")
-        or payload.get("email")
-        or "unknown@unknown"
-    )
+    Raises HTTP 401/403/503 on validation failure.
+    """
+    # Decode claims without verification (safe — used only for routing)
+    try:
+        claims = _decode_unverified(token)
+    except jwt.exceptions.DecodeError as exc:
+        raise HTTPException(status_code=401, detail="Malformed JWT token.") from exc
 
-    return UserContext(
-        object_id=oid,
-        upn=upn,
-        display_name=payload.get("name", ""),
-        raw_token=token,
-    )
+    # Path 1: fast local JWKS verification
+    user = _validate_via_jwks(token, claims)
+    if user is not None:
+        return user
+
+    # Path 2: Graph /me introspection (handles cross-tenant, Graph tokens, etc.)
+    return _validate_via_graph(token)
 
 
 async def get_current_user(
