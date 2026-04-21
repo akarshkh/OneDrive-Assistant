@@ -13,7 +13,6 @@ Flow:
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -52,8 +51,7 @@ def _extract_tenant_from_token(token: str) -> str | None:
     Returns None if extraction fails.
     """
     try:
-        import jwt as _jwt
-        unverified = _jwt.decode(token, options={"verify_signature": False})
+        unverified = jwt.decode(token, options={"verify_signature": False})
         iss = unverified.get("iss", "")
         # v1: https://sts.windows.net/{tenant-id}/
         # v2: https://login.microsoftonline.com/{tenant-id}/v2.0
@@ -190,7 +188,6 @@ def validate_token(token: str) -> UserContext:
 
     # Check Files.Read is in scope (scp claim is space-separated)
     scopes = set(payload.get("scp", "").split())
-    required = {"Files.Read"}
     # Also accept Files.ReadWrite or Files.Read.All as supersets
     allowed_scopes = {"Files.Read", "Files.ReadWrite", "Files.ReadWrite.All", "Files.Read.All"}
     if not scopes.intersection(allowed_scopes):
