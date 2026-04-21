@@ -46,24 +46,33 @@ class UserContext:
 
 def _extract_tenant_from_token(token: str) -> str | None:
     """
-    Decode the token without verification to extract the tenant ID from the
-    issuer claim. Supports both v1 (sts.windows.net) and v2 (login.microsoftonline.com) issuers.
+    Decode the token WITHOUT verification to extract the tenant ID.
+    Azure AD tokens always include a direct 'tid' claim with the tenant GUID.
+    Falls back to parsing the 'iss' URL if 'tid' is absent.
     Returns None if extraction fails.
     """
     try:
-        unverified = jwt.decode(token, options={"verify_signature": False})
-        iss = unverified.get("iss", "")
+        # PyJWT 2.x requires 'algorithms' even when verify_signature=False
+        unverified = jwt.decode(
+            token,
+            options={"verify_signature": False},
+            algorithms=["RS256", "RS384", "RS512"],
+        )
+        # Prefer the direct 'tid' claim — it is always a clean tenant GUID
+        tid = unverified.get("tid")
+        if tid:
+            return tid
+        # Fallback: parse tenant from the issuer URL
         # v1: https://sts.windows.net/{tenant-id}/
         # v2: https://login.microsoftonline.com/{tenant-id}/v2.0
+        iss = unverified.get("iss", "")
         if "sts.windows.net" in iss or "login.microsoftonline.com" in iss:
             parts = iss.rstrip("/").split("/")
-            # The tenant ID is always the segment after the hostname
             tid = parts[3] if len(parts) >= 4 else None
-            # Skip 'common', 'organizations', 'consumers' — not a real tenant
             if tid and tid not in ("common", "organizations", "consumers"):
                 return tid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Could not extract tenant from token: %s", exc)
     return None
 
 
