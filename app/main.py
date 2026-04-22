@@ -229,9 +229,11 @@ def create_app() -> FastAPI:
         }
 
     # ── Routers ───────────────────────────────────────────────────────────────
+    from app.routes import chat
     app.include_router(search.router)
     app.include_router(document.router)
     app.include_router(summarize.router)
+    app.include_router(chat.router)
 
     return app
 

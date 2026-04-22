@@ -97,6 +97,36 @@ class SummaryResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# ── Chat / Q&A ────────────────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    """Request body for POST /chat."""
+
+    document_id: str = Field(
+        ...,
+        alias="documentId",
+        description="The OneDrive item ID to query",
+    )
+    question: str = Field(
+        ...,
+        description="The specific question to ask about this document's content",
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+class ChatResponse(BaseModel):
+    """Answer returned by POST /chat."""
+
+    answer: str = Field(..., description="The AI-generated answer based on the document")
+    document_name: str = Field(..., alias="documentName")
+    model_used: Optional[str] = Field(
+        None, alias="modelUsed", description="AI model that generated this answer"
+    )
+
+    model_config = {"populate_by_name": True}
+
+
 # ── Errors ────────────────────────────────────────────────────────────────────
 
 class ErrorResponse(BaseModel):

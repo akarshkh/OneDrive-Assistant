@@ -20,6 +20,8 @@ ENV/
 .env
 *.env.local
 *.env.production
+azure_secrets.txt
+secrets/*.txt
 
 # ── Test / Coverage ───────────────────────────────────────────────────────────
 .pytest_cache/

@@ -1,344 +1,151 @@
 {
-  "openapi": "3.0.3",
+  "openapi": "3.0.1",
   "info": {
-    "title": "Personal OneDrive Document Finder Agent",
-    "description": "A Microsoft Copilot Studio–compatible API that lets a signed-in user search their OneDrive, retrieve document metadata, and optionally generate AI summaries **on demand** to minimise cost.\n\n**Authentication:** Bearer token (Azure AD delegated flow — `Files.Read` scope required).\n\n> ⚡ `/search` and `/document/{id}` — zero AI cost, fast responses.\n> 🧠 `/summarize` — AI called only on explicit user request.",
-    "version": "1.0.0",
-    "contact": {
-      "name": "API Support",
-      "email": "support@example.com"
-    },
-    "license": {
-      "name": "MIT"
-    }
+    "title": "OneDrive Assistant API",
+    "description": "Secure, cost-efficient OneDrive document search and AI-powered summarization/chat.",
+    "version": "1.1.0"
   },
   "servers": [
     {
-      "url": "https://onedrive-agent-api.onrender.com",
-      "description": "Production (Render)"
-    },
-    {
-      "url": "http://localhost:8000",
-      "description": "Local development"
-    }
-  ],
-  "security": [
-    {
-      "BearerAuth": []
+      "url": "https://onedrive-agent-api.onrender.com"
     }
   ],
   "paths": {
-    "/health": {
-      "get": {
-        "tags": ["Health"],
-        "operationId": "healthCheck",
-        "summary": "Liveness probe",
-        "description": "Returns 200 OK when the service is ready. No authentication required.",
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Service is healthy",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HealthResponse" },
-                "example": {
-                  "status": "ok",
-                  "version": "1.0.0",
-                  "ai_provider": "openai"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/search": {
       "get": {
         "tags": ["Search"],
         "operationId": "searchDocuments",
-        "summary": "Search OneDrive documents",
-        "description": "Search the authenticated user's OneDrive for documents matching the query.\n\n**No AI is used. No document content is fetched.**\n\nDesigned to be fast (< 1s) and low-cost. Suitable for high-frequency Copilot Studio agent calls.",
+        "summary": "Search OneDrive (metadata only — zero AI cost)",
+        "description": "Performs a lightning-fast keyword search across the user's OneDrive. Returns metadata only. No AI is used for this operation.",
         "parameters": [
           {
             "name": "q",
             "in": "query",
             "required": true,
-            "description": "Search query string (filename, keyword, or phrase)",
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 256,
-              "example": "Q4 budget report"
-            }
+            "description": "Search keywords (e.g. 'budget', 'roadmap')",
+            "schema": { "type": "string", "minLength": 2, "maxLength": 256, "example": "Q4 budget report" }
           },
           {
             "name": "top",
             "in": "query",
             "required": false,
-            "description": "Maximum number of results to return (1–50)",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 50,
-              "default": 25,
-              "example": 10
-            }
+            "description": "Max results (1-50)",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 }
           }
         ],
         "responses": {
           "200": {
-            "description": "Search results returned successfully",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/SearchResponse" },
-                "example": {
-                  "query": "Q4 budget",
-                  "total": 2,
-                  "results": [
-                    {
-                      "id": "01BYE5RZ6QN3ZWBTUCIRGZ",
-                      "name": "Q4 Budget Report.xlsx",
-                      "webUrl": "https://onedrive.live.com/edit.aspx?...",
-                      "lastModifiedDateTime": "2024-11-15T09:23:00Z",
-                      "fileType": "xlsx"
-                    },
-                    {
-                      "id": "01BYE5RZ6QN3ZWBTUCIRGX",
-                      "name": "Q4 Budget Summary.pdf",
-                      "webUrl": "https://onedrive.live.com/view.aspx?...",
-                      "lastModifiedDateTime": "2024-11-10T14:05:00Z",
-                      "fileType": "pdf"
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "Search results returned",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SearchResponse" } } }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "502": { "$ref": "#/components/responses/BadGateway" },
-          "504": { "$ref": "#/components/responses/GatewayTimeout" }
-        }
-      }
-    },
-    "/debug/graph-status": {
-      "get": {
-        "tags": ["Health"],
-        "operationId": "getGraphStatus",
-        "summary": "Check Graph API access",
-        "description": "Attempts a simple GET /me call to verify if the account is accessible or blocked.",
-        "responses": {
-          "200": {
-            "description": "Diagnostic info returned",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status_code": { "type": "string" },
-                    "graph_response": { "type": "object" },
-                    "note": { "type": "string" }
-                  }
-                }
-              }
-            }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
-        }
-      }
-    },
-    "/debug/ai-status": {
-      "get": {
-        "tags": ["Health"],
-        "operationId": "getAIStatus",
-        "summary": "Check AI configuration",
-        "description": "Verifies the AI provider settings without calling Graph.",
-        "responses": {
-          "200": {
-            "description": "AI diagnostic info returned",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "provider": { "type": "string" },
-                    "model": { "type": "string" },
-                    "has_key": { "type": "boolean" },
-                    "network_reachability": { "type": "string" },
-                    "note": { "type": "string" }
-                  }
-                }
-              }
-            }
-          }
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
     "/document/{item_id}": {
       "get": {
         "tags": ["Document"],
-        "operationId": "getDocument",
-        "summary": "Get document details",
-        "description": "Retrieve metadata and a short-lived download URL for a specific OneDrive document.\n\n**No AI is used. Document content is not read.**",
+        "operationId": "getDocumentDetail",
+        "summary": "Get file metadata (zero AI cost)",
+        "description": "Fetches technical metadata and a temporary download link for a specific OneDrive item.",
         "parameters": [
           {
             "name": "item_id",
             "in": "path",
             "required": true,
-            "description": "OneDrive item ID (obtained from /search results)",
-            "schema": {
-              "type": "string",
-              "example": "01BYE5RZ6QN3ZWBTUCIRGZ"
-            }
+            "schema": { "type": "string" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Document metadata returned",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/DocumentDetail" },
-                "example": {
-                  "id": "01BYE5RZ6QN3ZWBTUCIRGZ",
-                  "name": "Q4 Budget Report.xlsx",
-                  "webUrl": "https://onedrive.live.com/edit.aspx?...",
-                  "size": 524288,
-                  "createdDateTime": "2024-10-01T08:00:00Z",
-                  "lastModifiedDateTime": "2024-11-15T09:23:00Z",
-                  "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                }
-              }
-            }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+            "description": "Metadata returned",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DocumentDetail" } } }
+          }
         }
       }
     },
     "/summarize": {
       "post": {
-        "tags": ["Summarize"],
+        "tags": ["AI"],
         "operationId": "summarizeDocument",
         "summary": "Summarize a document (AI — on-demand only)",
-        "description": "Downloads the document content and sends it to an AI model to generate a summary and key points.\n\n**AI is ONLY invoked by this endpoint — never automatically.**\n\nResults are cached in-memory (TTL: 1 hour) to prevent repeated billing for the same document.",
+        "description": "Downloads the document and generates a 3-5 sentence summary. AI is only called when this endpoint is hit.",
         "requestBody": {
           "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/SummarizeRequest" },
-              "example": {
-                "documentId": "01BYE5RZ6QN3ZWBTUCIRGZ",
-                "maxTokens": 500
-              }
-            }
-          }
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SummarizeRequest" } } }
         },
         "responses": {
           "200": {
-            "description": "AI-generated summary returned",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/SummaryResponse" },
-                "example": {
-                  "documentId": "01BYE5RZ6QN3ZWBTUCIRGZ",
-                  "documentName": "Q4 Budget Report.xlsx",
-                  "summary": "The Q4 Budget Report outlines the financial performance of the company for the fourth quarter. Revenue exceeded targets by 12%, driven primarily by strong software sales. Operating expenses were within budget, and net profit increased by 8% year-over-year. The report recommends maintaining current headcount through Q1.",
-                  "keyPoints": [
-                    "Revenue exceeded Q4 targets by 12%",
-                    "Software sales were the primary growth driver",
-                    "Operating expenses stayed within approved budget",
-                    "Net profit up 8% year-over-year",
-                    "Headcount freeze recommended for Q1"
-                  ],
-                  "cached": false,
-                  "modelUsed": "gpt-4o-mini"
-                }
-              }
-            }
+            "description": "Summary returned",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SummaryResponse" } } }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "413": {
-            "description": "Document too large for summarization (> 1.5 MB)",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": {
-                  "error": "content_too_large",
-                  "message": "Document is 2.3 MB. Maximum allowed: 1.5 MB."
-                }
-              }
-            }
+          "413": { "description": "Document too large (>1.5MB)" },
+          "502": { "$ref": "#/components/responses/BadGateway" }
+        }
+      }
+    },
+    "/chat": {
+      "post": {
+        "tags": ["AI"],
+        "operationId": "chatWithDocument",
+        "summary": "Ask a specific question about a document (AI Q&A)",
+        "description": "Downloads the document and uses AI to answer a specific question based ONLY on the content found in that file.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Answer returned",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatResponse" } } }
           },
-          "422": {
-            "description": "Unable to extract readable text from the document",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
-              }
-            }
-          },
-          "502": { "$ref": "#/components/responses/BadGateway" },
-          "504": { "$ref": "#/components/responses/GatewayTimeout" }
+          "502": { "$ref": "#/components/responses/BadGateway" }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "healthCheck",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } }
         }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "BearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "Microsoft Graph access token for tenant 3163c13f-b80f-426c-94b0-fa4c0bf66ad7 with `Files.Read` scope. Audience: `https://graph.microsoft.com`"
-      }
+      "BearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
     },
     "schemas": {
       "HealthResponse": {
         "type": "object",
         "required": ["status", "version", "ai_provider"],
         "properties": {
-          "status": { "type": "string", "example": "ok" },
-          "version": { "type": "string", "example": "1.0.0" },
-          "ai_provider": { 
-            "type": "string", 
-            "example": "openai",
-            "enum": ["openai", "azure_openai", "google_ai_studio", "groq"]
-          }
+          "status": { "type": "string" },
+          "version": { "type": "string" },
+          "ai_provider": { "type": "string", "enum": ["openai", "azure_openai", "google_ai_studio", "groq"] }
         }
       },
       "SearchResultItem": {
         "type": "object",
         "required": ["id", "name", "webUrl"],
         "properties": {
-          "id": { "type": "string", "description": "OneDrive item ID" },
-          "name": { "type": "string", "description": "File name with extension" },
-          "webUrl": { "type": "string", "description": "Direct browser URL" },
-          "lastModifiedDateTime": {
-            "type": "string",
-            "nullable": true,
-            "description": "Last modification timestamp (UTC)"
-          },
-          "fileType": {
-            "type": "string",
-            "nullable": true,
-            "description": "File extension (e.g. docx, pdf, xlsx)"
-          }
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "webUrl": { "type": "string" },
+          "lastModifiedDateTime": { "type": "string", "nullable": true },
+          "fileType": { "type": "string", "nullable": true }
         }
       },
       "SearchResponse": {
         "type": "object",
         "required": ["query", "total", "results"],
         "properties": {
-          "query": { "type": "string", "description": "The search query executed" },
-          "total": { "type": "integer", "description": "Number of results returned" },
-          "results": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/SearchResultItem" }
-          }
+          "query": { "type": "string" },
+          "total": { "type": "integer" },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/SearchResultItem" } }
         }
       },
       "DocumentDetail": {
@@ -348,32 +155,15 @@
           "id": { "type": "string" },
           "name": { "type": "string" },
           "webUrl": { "type": "string" },
-          "size": { "type": "integer", "nullable": true, "description": "File size in bytes" },
-          "createdDateTime": { "type": "string", "nullable": true },
-          "lastModifiedDateTime": { "type": "string", "nullable": true },
-          "mimeType": { "type": "string", "nullable": true, "description": "MIME type" },
-          "@microsoft.graph.downloadUrl": {
-            "type": "string",
-            "nullable": true,
-            "description": "Pre-authenticated download URL (valid ~1 hour)"
-          }
+          "size": { "type": "integer", "nullable": true }
         }
       },
       "SummarizeRequest": {
         "type": "object",
         "required": ["documentId"],
         "properties": {
-          "documentId": {
-            "type": "string",
-            "description": "OneDrive item ID to summarize"
-          },
-          "maxTokens": {
-            "type": "integer",
-            "minimum": 100,
-            "maximum": 2000,
-            "default": 500,
-            "description": "Max tokens for AI response (controls cost per call)"
-          }
+          "documentId": { "type": "string" },
+          "maxTokens": { "type": "integer", "default": 500 }
         }
       },
       "SummaryResponse": {
@@ -382,104 +172,44 @@
         "properties": {
           "documentId": { "type": "string" },
           "documentName": { "type": "string" },
-          "summary": {
-            "type": "string",
-            "description": "3–5 sentence plain-text summary"
-          },
-          "keyPoints": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Bullet-style key points"
-          },
-          "cached": {
-            "type": "boolean",
-            "description": "True if served from cache (no AI cost incurred)"
-          },
-          "modelUsed": {
-            "type": "string",
-            "nullable": true,
-            "description": "AI model that generated this summary"
-          }
+          "summary": { "type": "string" },
+          "keyPoints": { "type": "array", "items": { "type": "string" } },
+          "cached": { "type": "boolean" },
+          "modelUsed": { "type": "string", "nullable": true }
+        }
+      },
+      "ChatRequest": {
+        "type": "object",
+        "required": ["documentId", "question"],
+        "properties": {
+          "documentId": { "type": "string" },
+          "question": { "type": "string" }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "required": ["answer", "documentName"],
+        "properties": {
+          "answer": { "type": "string" },
+          "documentName": { "type": "string" },
+          "modelUsed": { "type": "string", "nullable": true }
         }
       },
       "ErrorResponse": {
         "type": "object",
         "required": ["error", "message"],
         "properties": {
-          "error": { "type": "string", "description": "Short error code" },
-          "message": { "type": "string", "description": "Human-readable description" },
-          "details": { "type": "string", "nullable": true, "description": "Debug info (dev only)" }
+          "error": { "type": "string" },
+          "message": { "type": "string" }
         }
       }
     },
     "responses": {
-      "BadRequest": {
-        "description": "Invalid request parameters",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
-          }
-        }
-      },
-      "Unauthorized": {
-        "description": "Missing or invalid access token",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-            "example": { "error": "unauthorized", "message": "Token has expired." }
-          }
-        }
-      },
-      "Forbidden": {
-        "description": "Token lacks required permissions",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
-          }
-        }
-      },
-      "NotFound": {
-        "description": "Document not found",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
-          }
-        }
-      },
-      "BadGateway": {
-        "description": "Upstream error (Graph API or AI provider)",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
-          }
-        }
-      },
-      "GatewayTimeout": {
-        "description": "Upstream timeout",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
-          }
-        }
-      }
+      "Unauthorized": { "description": "Unauthorized" },
+      "Forbidden": { "description": "Forbidden" },
+      "NotFound": { "description": "Not Found" },
+      "BadGateway": { "description": "AI or Graph Error" },
+      "GatewayTimeout": { "description": "Timeout" }
     }
-  },
-  "tags": [
-    {
-      "name": "Search",
-      "description": "⚡ Fast, cheap OneDrive search — zero AI cost"
-    },
-    {
-      "name": "Document",
-      "description": "📄 Document metadata — zero AI cost"
-    },
-    {
-      "name": "Summarize",
-      "description": "🧠 On-demand AI summarization — AI called only when explicitly requested"
-    },
-    {
-      "name": "Health",
-      "description": "🩺 Liveness probe"
-    }
-  ]
+  }
 }
