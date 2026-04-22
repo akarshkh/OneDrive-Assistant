@@ -26,9 +26,9 @@ class Settings(BaseSettings):
     )
 
     # ── AI Provider ──────────────────────────────────────────────────────────
-    ai_provider: Literal["openai", "azure_openai"] = Field(
+    ai_provider: Literal["openai", "azure_openai", "google_ai_studio"] = Field(
         "openai",
-        description="'openai' or 'azure_openai'",
+        description="'openai', 'azure_openai', or 'google_ai_studio'",
     )
 
     # OpenAI
@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     )
     azure_openai_api_version: str = Field(
         "2024-02-01", description="Azure OpenAI API version"
+    )
+    
+    # Google AI Studio (Gemini)
+    google_api_key: str = Field("", description="Google Gemini API key")
+    google_model: str = Field(
+        "gemini-1.5-flash", description="Gemini model (e.g. gemini-1.5-flash)"
     )
 
     # ── Cost / Limits ─────────────────────────────────────────────────────────

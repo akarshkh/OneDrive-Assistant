@@ -186,18 +186,34 @@ def create_app() -> FastAPI:
     async def ai_status() -> dict[str, Any]:
         reachability = "Checking..."
         try:
+            target_url = "https://api.openai.com/v1/models"
+            if settings.ai_provider == "google_ai_studio":
+                target_url = "https://generativelanguage.googleapis.com/v1beta/openai/models"
+            elif settings.ai_provider == "azure_openai":
+                target_url = settings.azure_openai_endpoint
+
             client = graph_client._client()
-            resp = await client.get("https://api.openai.com/v1/models", timeout=5.0)
+            resp = await client.get(target_url, timeout=5.0)
             reachability = f"Connected (Status: {resp.status_code})"
         except Exception as exc:
             reachability = f"Unreachable: {type(exc).__name__} - {str(exc)}"
 
+        model_name = settings.openai_model
+        if settings.ai_provider == "google_ai_studio":
+            model_name = settings.google_model
+        elif settings.ai_provider == "azure_openai":
+            model_name = settings.azure_openai_deployment
+
         return {
             "provider": settings.ai_provider,
-            "model": settings.openai_model if settings.ai_provider == "openai" else settings.azure_openai_deployment,
-            "has_key": bool(settings.openai_api_key or settings.azure_openai_api_key),
+            "model": model_name,
+            "has_key": bool(
+                settings.openai_api_key or 
+                settings.azure_openai_api_key or 
+                settings.google_api_key
+            ),
             "network_reachability": reachability,
-            "note": "A status 401 on reachability is actually GOOD — it means we reached OpenAI."
+            "note": "A status 401 on reachability is actually GOOD — it means we reached the provider."
         }
 
     # ── Routers ───────────────────────────────────────────────────────────────
