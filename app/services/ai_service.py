@@ -251,6 +251,31 @@ async def _call_ai(
                 detail=f"AI summarization failed (Native API Error: {err_type}): {exc}",
             ) from exc
 
+    elif settings.ai_provider == "groq":
+        try:
+            from openai import AsyncOpenAI  # type: ignore[import]
+
+            client = AsyncOpenAI(
+                api_key=settings.groq_api_key,
+                base_url="https://api.groq.com/openai/v1",
+                timeout=60.0,
+            )
+            response = await client.chat.completions.create(
+                model=settings.groq_model,
+                messages=messages,  # type: ignore[arg-type]
+                max_tokens=max_tokens,
+                temperature=0.2,
+            )
+            raw = response.choices[0].message.content or "{}"
+            model_used = f"groq/{settings.groq_model}"
+        except Exception as exc:
+            err_type = type(exc).__name__
+            logger.error("Groq call failed (%s): %s", err_type, exc)
+            raise HTTPException(
+                status_code=502,
+                detail=f"AI summarization failed (Groq Error: {err_type}): {exc}",
+            ) from exc
+
     else:
         raise HTTPException(
             status_code=500,

@@ -26,9 +26,9 @@ class Settings(BaseSettings):
     )
 
     # ── AI Provider ──────────────────────────────────────────────────────────
-    ai_provider: Literal["openai", "azure_openai", "google_ai_studio"] = Field(
+    ai_provider: Literal["openai", "azure_openai", "google_ai_studio", "groq"] = Field(
         "openai",
-        description="'openai', 'azure_openai', or 'google_ai_studio'",
+        description="'openai', 'azure_openai', 'google_ai_studio', or 'groq'",
     )
 
     # OpenAI
@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     google_api_key: str = Field("", description="Google Gemini API key")
     google_model: str = Field(
         "gemini-2.0-flash", description="Gemini model (e.g. gemini-2.0-flash)"
+    )
+
+    # Groq (Free Tier)
+    groq_api_key: str = Field("", description="Groq API key")
+    groq_model: str = Field(
+        "llama-3.3-70b-versatile", description="Groq model (e.g. llama-3.3-70b-versatile)"
     )
 
     # ── Cost / Limits ─────────────────────────────────────────────────────────

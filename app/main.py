@@ -191,6 +191,8 @@ def create_app() -> FastAPI:
             if settings.ai_provider == "google_ai_studio":
                 # Native listModels to see exactly what this key can access
                 target_url = f"https://generativelanguage.googleapis.com/v1/models?key={settings.google_api_key}"
+            elif settings.ai_provider == "groq":
+                target_url = "https://api.groq.com/openai/v1/models"
             elif settings.ai_provider == "azure_openai":
                 target_url = settings.azure_openai_endpoint
 
@@ -207,6 +209,8 @@ def create_app() -> FastAPI:
         model_name = settings.openai_model
         if settings.ai_provider == "google_ai_studio":
             model_name = settings.google_model
+        elif settings.ai_provider == "groq":
+            model_name = settings.groq_model
         elif settings.ai_provider == "azure_openai":
             model_name = settings.azure_openai_deployment
 
@@ -216,7 +220,8 @@ def create_app() -> FastAPI:
             "has_key": bool(
                 settings.openai_api_key or 
                 settings.azure_openai_api_key or 
-                settings.google_api_key
+                settings.google_api_key or
+                settings.groq_api_key
             ),
             "network_reachability": reachability,
             "available_models_on_google": available_models if available_models else "None detected",

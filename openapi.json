@@ -303,7 +303,11 @@
         "properties": {
           "status": { "type": "string", "example": "ok" },
           "version": { "type": "string", "example": "1.0.0" },
-          "ai_provider": { "type": "string", "example": "openai" }
+          "ai_provider": { 
+            "type": "string", 
+            "example": "openai",
+            "enum": ["openai", "azure_openai", "google_ai_studio", "groq"]
+          }
         }
       },
       "SearchResultItem": {
