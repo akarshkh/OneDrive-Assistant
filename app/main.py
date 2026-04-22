@@ -188,7 +188,7 @@ def create_app() -> FastAPI:
         try:
             target_url = "https://api.openai.com/v1/models"
             if settings.ai_provider == "google_ai_studio":
-                target_url = "https://generativelanguage.googleapis.com/v1beta/openai/models"
+                target_url = "https://generativelanguage.googleapis.com/v1/openai/models"
             elif settings.ai_provider == "azure_openai":
                 target_url = settings.azure_openai_endpoint
 
