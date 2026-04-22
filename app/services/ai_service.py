@@ -186,6 +186,9 @@ async def _call_ai(
                 temperature=0.2,
                 response_format={"type": "json_object"},
             )
+            raw = response.choices[0].message.content or "{}"
+            model_used = f"azure/{settings.azure_openai_deployment}"
+        except Exception as exc:
             err_type = type(exc).__name__
             logger.error("Azure OpenAI call failed (%s): %s", err_type, exc)
             raise HTTPException(
