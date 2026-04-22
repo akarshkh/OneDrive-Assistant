@@ -148,7 +148,10 @@ async def _call_ai(
         try:
             from openai import AsyncOpenAI  # type: ignore[import]
 
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            client = AsyncOpenAI(
+                api_key=settings.openai_api_key,
+                timeout=60.0,
+            )
             response = await client.chat.completions.create(
                 model=settings.openai_model,
                 messages=messages,  # type: ignore[arg-type]
@@ -159,10 +162,11 @@ async def _call_ai(
             raw = response.choices[0].message.content or "{}"
             model_used = response.model
         except Exception as exc:
-            logger.error("OpenAI call failed: %s", exc)
+            err_type = type(exc).__name__
+            logger.error("OpenAI call failed (%s): %s", err_type, exc)
             raise HTTPException(
                 status_code=502,
-                detail=f"AI summarization failed: {exc}",
+                detail=f"AI summarization failed ({err_type}): {exc}",
             ) from exc
 
     elif settings.ai_provider == "azure_openai":
@@ -173,6 +177,7 @@ async def _call_ai(
                 api_key=settings.azure_openai_api_key,
                 azure_endpoint=settings.azure_openai_endpoint,
                 api_version=settings.azure_openai_api_version,
+                timeout=60.0,
             )
             response = await client.chat.completions.create(
                 model=settings.azure_openai_deployment,
@@ -184,10 +189,11 @@ async def _call_ai(
             raw = response.choices[0].message.content or "{}"
             model_used = f"azure/{settings.azure_openai_deployment}"
         except Exception as exc:
-            logger.error("Azure OpenAI call failed: %s", exc)
+            err_type = type(exc).__name__
+            logger.error("Azure OpenAI call failed (%s): %s", err_type, exc)
             raise HTTPException(
                 status_code=502,
-                detail=f"AI summarization failed: {exc}",
+                detail=f"AI summarization failed ({err_type}): {exc}",
             ) from exc
 
     else:

@@ -181,14 +181,25 @@ def create_app() -> FastAPI:
         "/debug/ai-status",
         tags=["Health"],
         summary="Check AI configuration",
-        description="Verifies the AI provider settings without calling Graph.",
+        description="Verifies the AI provider settings and network reachability to the provider's API.",
     )
     async def ai_status() -> dict[str, Any]:
+        reachability = "Checking..."
+        try:
+            # Attempt to reach OpenAI models endpoint (doesn't require a key for a HEAD request)
+            # or just see if the host resolves and connects.
+            async with graph_client._client() as client:
+                resp = await client.get("https://api.openai.com/v1/models", timeout=5.0)
+                reachability = f"Connected (Status: {resp.status_code})"
+        except Exception as exc:
+            reachability = f"Unreachable: {type(exc).__name__}"
+
         return {
             "provider": settings.ai_provider,
             "model": settings.openai_model if settings.ai_provider == "openai" else settings.azure_openai_deployment,
             "has_key": bool(settings.openai_api_key or settings.azure_openai_api_key),
-            "note": "This check only verifies configuration presence, not key validity."
+            "network_reachability": reachability,
+            "note": "A status 401 on reachability is actually GOOD — it means we reached OpenAI."
         }
 
     # ── Routers ───────────────────────────────────────────────────────────────

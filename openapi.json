@@ -165,6 +165,7 @@
                     "provider": { "type": "string" },
                     "model": { "type": "string" },
                     "has_key": { "type": "boolean" },
+                    "network_reachability": { "type": "string" },
                     "note": { "type": "string" }
                   }
                 }
