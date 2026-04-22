@@ -28,10 +28,11 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.auth.jwt_validator import UserContext, get_current_user
 from app.config import get_settings
 from app.graph import client as graph_client
 from app.models.schemas import ErrorResponse, HealthResponse
