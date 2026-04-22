@@ -22,7 +22,7 @@ class SearchResultItem(BaseModel):
         None, alias="lastModifiedDateTime", description="Last modification timestamp (UTC)"
     )
     file_type: Optional[str] = Field(
-        None, description="File extension (e.g. docx, pdf, xlsx)"
+        None, alias="fileType", description="File extension (e.g. docx, pdf, xlsx)"
     )
 
     model_config = {"populate_by_name": True}
