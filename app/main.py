@@ -186,13 +186,11 @@ def create_app() -> FastAPI:
     async def ai_status() -> dict[str, Any]:
         reachability = "Checking..."
         try:
-            # Attempt to reach OpenAI models endpoint (doesn't require a key for a HEAD request)
-            # or just see if the host resolves and connects.
-            async with graph_client._client() as client:
-                resp = await client.get("https://api.openai.com/v1/models", timeout=5.0)
-                reachability = f"Connected (Status: {resp.status_code})"
+            client = graph_client._client()
+            resp = await client.get("https://api.openai.com/v1/models", timeout=5.0)
+            reachability = f"Connected (Status: {resp.status_code})"
         except Exception as exc:
-            reachability = f"Unreachable: {type(exc).__name__}"
+            reachability = f"Unreachable: {type(exc).__name__} - {str(exc)}"
 
         return {
             "provider": settings.ai_provider,
