@@ -199,9 +199,10 @@ async def _call_ai(
     elif settings.ai_provider == "google_ai_studio":
         try:
             import httpx
-            # Native Gemini REST API (stable v1)
+            # Native Gemini REST API
             model = settings.google_model.replace("models/", "")
-            url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={settings.google_api_key}"
+            # Using v1beta as Gemini 2.0 features are often more stable there for REST
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.google_api_key}"
             
             # Convert OpenAI-style messages to Gemini-style contents.
             # Native Gemini requires alternating roles, so we merge sequential user messages.
@@ -222,7 +223,13 @@ async def _call_ai(
 
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(url, json=payload)
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    error_body = resp.text
+                    logger.error("Gemini API Error (%d): %s", resp.status_code, error_body)
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Gemini API Error {resp.status_code}: {error_body}"
+                    )
                 data = resp.json()
 
             # Extract generated text
@@ -232,19 +239,16 @@ async def _call_ai(
                 model_used = f"google/{model}"
             except (KeyError, IndexError) as e:
                 logger.error("Failed to parse Gemini response: %s", data)
-                raise ValueError("Incomplete response from Gemini API") from e
+                raise ValueError(f"Incomplete response from Gemini API: {data}") from e
 
         except Exception as exc:
+            if isinstance(exc, HTTPException):
+                raise exc
             err_type = type(exc).__name__
             logger.error("Google AI Studio call failed (%s): %s", err_type, exc)
-            
-            detail_msg = f"AI summarization failed (Native API Error: {err_type}): {exc}"
-            if "404" in str(exc):
-                detail_msg += " - Error 404: The model name might be wrong. Run '/debug/ai-status' to see available IDs."
-            
             raise HTTPException(
                 status_code=502,
-                detail=detail_msg,
+                detail=f"AI summarization failed (Native API Error: {err_type}): {exc}",
             ) from exc
 
     else:
