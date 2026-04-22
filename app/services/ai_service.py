@@ -114,60 +114,80 @@ async def _call_ai_raw(
     ]
 
     if settings.ai_provider == "openai":
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=60.0)
-        resp = await client.chat.completions.create(
-            model=settings.openai_model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.2
-        )
-        return resp.choices[0].message.content or "{}", resp.model
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=60.0)
+            resp = await client.chat.completions.create(
+                model=settings.openai_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.2
+            )
+            return resp.choices[0].message.content or "{}", resp.model
+        except Exception as exc:
+            logger.error("OpenAI call failed: %s", exc)
+            raise HTTPException(status_code=502, detail=f"OpenAI Error: {exc}") from exc
 
     elif settings.ai_provider == "azure_openai":
-        from openai import AsyncAzureOpenAI
-        client = AsyncAzureOpenAI(
-            api_key=settings.azure_openai_api_key,
-            azure_endpoint=settings.azure_openai_endpoint,
-            api_version=settings.azure_openai_api_version,
-            timeout=60.0,
-        )
-        resp = await client.chat.completions.create(
-            model=settings.azure_openai_deployment,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.2
-        )
-        return resp.choices[0].message.content or "{}", f"azure/{settings.azure_openai_deployment}"
+        try:
+            from openai import AsyncAzureOpenAI
+            client = AsyncAzureOpenAI(
+                api_key=settings.azure_openai_api_key,
+                azure_endpoint=settings.azure_openai_endpoint,
+                api_version=settings.azure_openai_api_version,
+                timeout=60.0,
+            )
+            resp = await client.chat.completions.create(
+                model=settings.azure_openai_deployment,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.2
+            )
+            return resp.choices[0].message.content or "{}", f"azure/{settings.azure_openai_deployment}"
+        except Exception as exc:
+            logger.error("Azure OpenAI call failed: %s", exc)
+            raise HTTPException(status_code=502, detail=f"Azure OpenAI Error: {exc}") from exc
 
     elif settings.ai_provider == "google_ai_studio":
-        import httpx
-        model = settings.google_model.replace("models/", "")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.google_api_key}"
-        all_text = f"system: {system_prompt}\n\nuser: {user_msg}"
-        payload = {
-            "contents": [{"role": "user", "parts": [{"text": all_text}]}],
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": max_tokens}
-        }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code >= 400:
-                raise HTTPException(status_code=502, detail=f"Gemini Error {resp.status_code}: {resp.text}")
-            data = resp.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"], f"google/{model}"
+        try:
+            import httpx
+            model = settings.google_model.replace("models/", "")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.google_api_key}"
+            all_text = f"system: {system_prompt}\n\nuser: {user_msg}"
+            payload = {
+                "contents": [{"role": "user", "parts": [{"text": all_text}]}],
+                "generationConfig": {"temperature": 0.2, "maxOutputTokens": max_tokens}
+            }
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code >= 400:
+                    # Capture the full error body for debugging 429/400 errors
+                    error_detail = resp.text
+                    logger.error("Gemini API Error (%d): %s", resp.status_code, error_detail)
+                    raise HTTPException(status_code=502, detail=f"Gemini API Error {resp.status_code}: {error_detail}")
+                data = resp.json()
+                return data["candidates"][0]["content"]["parts"][0]["text"], f"google/{model}"
+        except Exception as exc:
+            if isinstance(exc, HTTPException): raise exc
+            logger.error("Google AI Studio failed: %s", exc)
+            raise HTTPException(status_code=502, detail=f"Gemini Connectivity Error: {exc}") from exc
 
     elif settings.ai_provider == "groq":
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1", timeout=60.0)
-        resp = await client.chat.completions.create(
-            model=settings.groq_model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.2
-        )
-        return resp.choices[0].message.content or "{}", f"groq/{settings.groq_model}"
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1", timeout=60.0)
+            resp = await client.chat.completions.create(
+                model=settings.groq_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.2
+            )
+            return resp.choices[0].message.content or "{}", f"groq/{settings.groq_model}"
+        except Exception as exc:
+            logger.error("Groq call failed: %s", exc)
+            raise HTTPException(status_code=502, detail=f"Groq Error: {exc}") from exc
 
-    raise HTTPException(status_code=500, detail="Unknown AI provider")
+    raise HTTPException(status_code=500, detail=f"Unknown AI provider: {settings.ai_provider}")
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
