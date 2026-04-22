@@ -14,8 +14,8 @@
   },
   "servers": [
     {
-      "url": "https://your-api-host.azurewebsites.net",
-      "description": "Production (Azure App Service)"
+      "url": "https://onedrive-agent-api.onrender.com",
+      "description": "Production (Render)"
     },
     {
       "url": "http://localhost:8000",
@@ -117,7 +117,60 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "502": { "$ref": "#/components/responses/BadGateway" },
           "504": { "$ref": "#/components/responses/GatewayTimeout" }
+        }
+      }
+    },
+    "/debug/graph-status": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "getGraphStatus",
+        "summary": "Check Graph API access",
+        "description": "Attempts a simple GET /me call to verify if the account is accessible or blocked.",
+        "responses": {
+          "200": {
+            "description": "Diagnostic info returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status_code": { "type": "string" },
+                    "graph_response": { "type": "object" },
+                    "note": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/debug/ai-status": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "getAIStatus",
+        "summary": "Check AI configuration",
+        "description": "Verifies the AI provider settings without calling Graph.",
+        "responses": {
+          "200": {
+            "description": "AI diagnostic info returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider": { "type": "string" },
+                    "model": { "type": "string" },
+                    "has_key": { "type": "boolean" },
+                    "note": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -239,7 +292,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Azure AD access token with `Files.Read` delegated scope. Audience: `api://<AZURE_CLIENT_ID>`"
+        "description": "Microsoft Graph access token for tenant 3163c13f-b80f-426c-94b0-fa4c0bf66ad7 with `Files.Read` scope. Audience: `https://graph.microsoft.com`"
       }
     },
     "schemas": {
@@ -258,10 +311,9 @@
         "properties": {
           "id": { "type": "string", "description": "OneDrive item ID" },
           "name": { "type": "string", "description": "File name with extension" },
-          "webUrl": { "type": "string", "format": "uri", "description": "Direct browser URL" },
+          "webUrl": { "type": "string", "description": "Direct browser URL" },
           "lastModifiedDateTime": {
             "type": "string",
-            "format": "date-time",
             "nullable": true,
             "description": "Last modification timestamp (UTC)"
           },
@@ -290,10 +342,10 @@
         "properties": {
           "id": { "type": "string" },
           "name": { "type": "string" },
-          "webUrl": { "type": "string", "format": "uri" },
+          "webUrl": { "type": "string" },
           "size": { "type": "integer", "nullable": true, "description": "File size in bytes" },
-          "createdDateTime": { "type": "string", "format": "date-time", "nullable": true },
-          "lastModifiedDateTime": { "type": "string", "format": "date-time", "nullable": true },
+          "createdDateTime": { "type": "string", "nullable": true },
+          "lastModifiedDateTime": { "type": "string", "nullable": true },
           "mimeType": { "type": "string", "nullable": true, "description": "MIME type" },
           "@microsoft.graph.downloadUrl": {
             "type": "string",

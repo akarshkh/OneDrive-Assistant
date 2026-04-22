@@ -44,7 +44,7 @@ After import, verify the **General** tab:
 | Field | Value |
 |---|---|
 | **Scheme** | HTTPS |
-| **Host** | `your-api-host.azurewebsites.net` |
+| **Host** | `onedrive-agent-api.onrender.com` |
 | **Base URL** | `/` |
 
 Upload an icon and set a description if desired.
@@ -61,10 +61,11 @@ Upload an icon and set a description if desired.
    | **Identity Provider** | Azure Active Directory |
    | **Client id** | `<Application (client) ID from Step 1>` |
    | **Client secret** | `<Secret from Step 5 of App Registration>` |
-   | **Authorization URL** | `https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/authorize` |
-   | **Token URL** | `https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/token` |
-   | **Refresh URL** | `https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/token` |
-   | **Scope** | `api://{client-id}/Files.Read offline_access` |
+   | **Authorization URL** | `https://login.microsoftonline.com/3163c13f-b80f-426c-94b0-fa4c0bf66ad7/oauth2/v2.0/authorize` |
+   | **Token URL** | `https://login.microsoftonline.com/3163c13f-b80f-426c-94b0-fa4c0bf66ad7/oauth2/v2.0/token` |
+   | **Refresh URL** | `https://login.microsoftonline.com/3163c13f-b80f-426c-94b0-fa4c0bf66ad7/oauth2/v2.0/token` |
+   | **Resource URL** | `https://graph.microsoft.com` |
+   | **Scope** | `https://graph.microsoft.com/Files.Read offline_access` |
 
 3. Click **Create connector**.
 4. After saving, copy the auto-generated **Redirect URL** shown at the top of the Security tab.

@@ -80,8 +80,8 @@ copy .env.example .env
 Minimum required values in `.env`:
 
 ```bash
-AZURE_TENANT_ID=your-tenant-id
-AZURE_CLIENT_ID=your-client-id
+AZURE_TENANT_ID=3163c13f-b80f-426c-94b0-fa4c0bf66ad7
+AZURE_CLIENT_ID=39a981b1-c5b6-4637-9c0c-a4c43055978c
 OPENAI_API_KEY=sk-...           # or use AZURE_OPENAI_* variables
 ```
 
@@ -194,7 +194,7 @@ curl -X POST \
 All endpoints (except `/health`) require a **Bearer token** obtained via the
 Azure AD OAuth 2.0 **Authorization Code** flow (delegated permissions).
 
-Required scope: `api://{AZURE_CLIENT_ID}/Files.Read`
+Required scope: `https://graph.microsoft.com/Files.Read`
 
 See [`docs/azure_app_registration.md`](docs/azure_app_registration.md) for setup.
 
@@ -215,8 +215,8 @@ See [`docs/copilot_connector_setup.md`](docs/copilot_connector_setup.md) for the
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `AZURE_TENANT_ID` | ✅ | — | Azure AD Tenant ID |
-| `AZURE_CLIENT_ID` | ✅ | — | App Registration Client ID |
+| `AZURE_TENANT_ID` | ✅ | `3163c13f-b80f-426c-94b0-fa4c0bf66ad7` | Azure AD Tenant ID |
+| `AZURE_CLIENT_ID` | ✅ | `39a981b1-c5b6-4637-9c0c-a4c43055978c` | App Registration Client ID |
 | `AI_PROVIDER` | — | `openai` | `openai` or `azure_openai` |
 | `OPENAI_API_KEY` | If OpenAI | — | OpenAI API key |
 | `OPENAI_MODEL` | — | `gpt-4o-mini` | Model name |

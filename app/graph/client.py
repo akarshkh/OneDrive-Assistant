@@ -100,6 +100,15 @@ def _handle_graph_error(response: httpx.Response, context: str) -> None:
             status_code=429,
             detail=f"Graph API rate limit exceeded. Retry after {retry_after} seconds.",
         )
+    if status == 423:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Access to this OneDrive site is blocked (HTTP 423). "
+                "This usually happens if the site is archived or locked by an admin. "
+                "Please check the SharePoint Admin Center."
+            ),
+        )
     raise HTTPException(
         status_code=502,
         detail=f"Microsoft Graph returned an unexpected error: {status} — {error_msg}",
@@ -183,8 +192,10 @@ async def get_item(token: str, item_id: str) -> dict[str, Any]:
     _handle_graph_error(resp, f"get_item({item_id})")
     data = resp.json()
 
-    # Attach mimeType at top level for convenience
-    data["mimeType"] = data.get("file", {}).get("mimeType")
+    # Extract downloadUrl and mimeType safely
+    data["@microsoft.graph.downloadUrl"] = data.get("@microsoft.graph.downloadUrl")
+    file_info = data.get("file", {})
+    data["mimeType"] = file_info.get("mimeType")
     return data
 
 

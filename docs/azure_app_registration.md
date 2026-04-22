@@ -120,19 +120,19 @@ Add optional claims to include user details in the token:
 ## Summary of Values for `.env`
 
 ```bash
-AZURE_TENANT_ID=<Directory (tenant) ID>
-AZURE_CLIENT_ID=<Application (client) ID>
+AZURE_TENANT_ID=3163c13f-b80f-426c-94b0-fa4c0bf66ad7
+AZURE_CLIENT_ID=39a981b1-c5b6-4637-9c0c-a4c43055978c
 ```
 
 And for Copilot Studio connector configuration:
 
 | Setting | Value |
 |---|---|
-| **Authorization URL** | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize` |
-| **Token URL** | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` |
+| **Authorization URL** | `https://login.microsoftonline.com/3163c13f-b80f-426c-94b0-fa4c0bf66ad7/oauth2/v2.0/authorize` |
+| **Token URL** | `https://login.microsoftonline.com/3163c13f-b80f-426c-94b0-fa4c0bf66ad7/oauth2/v2.0/token` |
 | **Client ID** | Your Application (client) ID |
 | **Client Secret** | The secret created in Step 5 |
-| **Scope** | `api://{client-id}/Files.Read offline_access` |
+| **Scope** | `https://graph.microsoft.com/Files.Read offline_access` |
 
 ---
 

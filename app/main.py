@@ -155,6 +155,41 @@ def create_app() -> FastAPI:
             ai_provider=settings.ai_provider,
         )
 
+    # ── Diagnostics (Internal) ────────────────────────────────────────────────
+    @app.get(
+        "/debug/graph-status",
+        tags=["Health"],
+        summary="Check Graph API access",
+        description="Attempts a simple GET /me call to verify if the account is accessible or blocked.",
+    )
+    async def graph_status(user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
+        try:
+            resp = await graph_client._client().get(
+                f"{settings.graph_base_url}/me",
+                headers={"Authorization": f"Bearer {user.raw_token}"},
+            )
+            return {
+                "status_code": str(resp.status_code),
+                "graph_response": resp.json() if resp.status_code < 300 else resp.text,
+                "note": "If this returns 423, the entire account is restricted."
+            }
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    @app.get(
+        "/debug/ai-status",
+        tags=["Health"],
+        summary="Check AI configuration",
+        description="Verifies the AI provider settings without calling Graph.",
+    )
+    async def ai_status() -> dict[str, Any]:
+        return {
+            "provider": settings.ai_provider,
+            "model": settings.openai_model if settings.ai_provider == "openai" else settings.azure_openai_deployment,
+            "has_key": bool(settings.openai_api_key or settings.azure_openai_api_key),
+            "note": "This check only verifies configuration presence, not key validity."
+        }
+
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(search.router)
     app.include_router(document.router)
