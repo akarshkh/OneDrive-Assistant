@@ -219,7 +219,7 @@ def create_app() -> FastAPI:
                 settings.google_api_key
             ),
             "network_reachability": reachability,
-            "available_models_on_google": available_models[:15] if available_models else "None detected",
+            "available_models_on_google": available_models if available_models else "None detected",
             "note": "If reachability is 404/403, check 'available_models_on_google' to see the exact IDs allowed."
         }
 
