@@ -198,29 +198,48 @@ async def _call_ai(
 
     elif settings.ai_provider == "google_ai_studio":
         try:
-            from openai import AsyncOpenAI  # type: ignore[import]
+            import httpx
+            # Native Gemini REST API
+            model = settings.google_model
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.google_api_key}"
+            
+            # Convert OpenAI-style messages to Gemini-style contents.
+            # Native Gemini requires alternating roles, so we merge sequential user messages.
+            all_text = "\n\n".join([m.get("content", "") for m in messages if m.get("role") == "user"])
+            contents = [{
+                "role": "user",
+                "parts": [{"text": all_text}]
+            }]
 
-            # Google Gemini supports the OpenAI-compatible endpoint
-            client = AsyncOpenAI(
-                api_key=settings.google_api_key,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                timeout=60.0,
-            )
-            response = await client.chat.completions.create(
-                model=settings.google_model,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=max_tokens,
-                temperature=0.2,
-                response_format={"type": "json_object"},
-            )
-            raw = response.choices[0].message.content or "{}"
-            model_used = f"google/{settings.google_model}"
+            payload = {
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "maxOutputTokens": max_tokens,
+                    "responseMimeType": "application/json"
+                }
+            }
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+
+            # Extract generated text
+            try:
+                candidate = data["candidates"][0]
+                raw = candidate["content"]["parts"][0]["text"]
+                model_used = f"google/{model}"
+            except (KeyError, IndexError) as e:
+                logger.error("Failed to parse Gemini response: %s", data)
+                raise ValueError("Incomplete response from Gemini API") from e
+
         except Exception as exc:
             err_type = type(exc).__name__
             logger.error("Google AI Studio call failed (%s): %s", err_type, exc)
             raise HTTPException(
                 status_code=502,
-                detail=f"AI summarization failed ({err_type}): {exc}",
+                detail=f"AI summarization failed (Native API Error: {err_type}): {exc}",
             ) from exc
 
     else:
