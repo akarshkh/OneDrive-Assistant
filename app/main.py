@@ -185,17 +185,22 @@ def create_app() -> FastAPI:
     )
     async def ai_status() -> dict[str, Any]:
         reachability = "Checking..."
+        available_models = []
         try:
             target_url = "https://api.openai.com/v1/models"
             if settings.ai_provider == "google_ai_studio":
-                # Native health check for the specific model
-                target_url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.google_model}?key={settings.google_api_key}"
+                # Native listModels to see exactly what this key can access
+                target_url = f"https://generativelanguage.googleapis.com/v1/models?key={settings.google_api_key}"
             elif settings.ai_provider == "azure_openai":
                 target_url = settings.azure_openai_endpoint
 
             client = graph_client._client()
             resp = await client.get(target_url, timeout=5.0)
             reachability = f"Connected (Status: {resp.status_code})"
+            
+            if settings.ai_provider == "google_ai_studio" and resp.status_code == 200:
+                data = resp.json()
+                available_models = [m.get("name") for m in data.get("models", [])]
         except Exception as exc:
             reachability = f"Unreachable: {type(exc).__name__} - {str(exc)}"
 
@@ -207,14 +212,15 @@ def create_app() -> FastAPI:
 
         return {
             "provider": settings.ai_provider,
-            "model": model_name,
+            "configured_model": model_name,
             "has_key": bool(
                 settings.openai_api_key or 
                 settings.azure_openai_api_key or 
                 settings.google_api_key
             ),
             "network_reachability": reachability,
-            "note": "A status 401 on reachability is actually GOOD — it means we reached the provider."
+            "available_models_on_google": available_models[:15] if available_models else "None detected",
+            "note": "If reachability is 404/403, check 'available_models_on_google' to see the exact IDs allowed."
         }
 
     # ── Routers ───────────────────────────────────────────────────────────────

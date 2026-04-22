@@ -199,9 +199,9 @@ async def _call_ai(
     elif settings.ai_provider == "google_ai_studio":
         try:
             import httpx
-            # Native Gemini REST API
+            # Native Gemini REST API (stable v1)
             model = settings.google_model
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.google_api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={settings.google_api_key}"
             
             # Convert OpenAI-style messages to Gemini-style contents.
             # Native Gemini requires alternating roles, so we merge sequential user messages.
@@ -237,9 +237,14 @@ async def _call_ai(
         except Exception as exc:
             err_type = type(exc).__name__
             logger.error("Google AI Studio call failed (%s): %s", err_type, exc)
+            
+            detail_msg = f"AI summarization failed (Native API Error: {err_type}): {exc}"
+            if "404" in str(exc):
+                detail_msg += " - Error 404: The model name might be wrong. Run '/debug/ai-status' to see available IDs."
+            
             raise HTTPException(
                 status_code=502,
-                detail=f"AI summarization failed (Native API Error: {err_type}): {exc}",
+                detail=detail_msg,
             ) from exc
 
     else:
