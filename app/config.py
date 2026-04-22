@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # Google AI Studio (Gemini)
     google_api_key: str = Field("", description="Google Gemini API key")
     google_model: str = Field(
-        "gemini-1.5-flash", description="Gemini model (e.g. gemini-1.5-flash)"
+        "gemini-2.0-flash", description="Gemini model (e.g. gemini-2.0-flash)"
     )
 
     # ── Cost / Limits ─────────────────────────────────────────────────────────

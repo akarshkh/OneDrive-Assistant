@@ -200,7 +200,7 @@ async def _call_ai(
         try:
             import httpx
             # Native Gemini REST API (stable v1)
-            model = settings.google_model
+            model = settings.google_model.replace("models/", "")
             url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={settings.google_api_key}"
             
             # Convert OpenAI-style messages to Gemini-style contents.
