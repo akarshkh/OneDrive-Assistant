@@ -203,7 +203,7 @@ async def _call_ai(
             # Google Gemini supports the OpenAI-compatible endpoint
             client = AsyncOpenAI(
                 api_key=settings.google_api_key,
-                base_url="https://generativelanguage.googleapis.com/v1/openai",
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
                 timeout=60.0,
             )
             response = await client.chat.completions.create(
